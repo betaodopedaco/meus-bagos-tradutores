@@ -1,65 +1,117 @@
 // server.js
 const express = require('express');
 const path = require('path');
+const OpenAI = require('openai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware para parsing JSON
-app.use(express.json());
+// Middleware
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
-// Rota para servir o frontend
+// Configuração OpenAI com verificação
+const getOpenAIClient = () => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+        console.error('❌ OPENAI_API_KEY não encontrada! Configure no Render.');
+        return null;
+    }
+    return new OpenAI({ apiKey });
+};
+
+// Rota principal
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Rota de tradução (substitui a função serverless do Vercel)
+// Rota de tradução com melhor tratamento de erro
 app.post('/api/translate', async (req, res) => {
+    console.log('📨 Recebendo requisição de tradução...');
+    
     const { text, difficulty } = req.body;
+    
+    // Validações
+    if (!text) {
+        return res.status(400).json({ error: 'Texto é obrigatório' });
+    }
 
-    // Aqui você precisa ter a lógica de tradução que estava na sua API do Vercel
-    // Como você está usando OpenAI, precisará do seu código de integração com a OpenAI
+    if (!difficulty) {
+        return res.status(400).json({ error: 'Dificuldade é obrigatória' });
+    }
 
-    // Exemplo básico (substitua pela sua lógica)
     try {
-        // Importar a OpenAI (certifique-se de que está instalada)
-        const OpenAI = require('openai');
+        const openai = getOpenAIClient();
+        if (!openai) {
+            return res.status(500).json({ 
+                error: 'Serviço de tradução não configurado. Contate o administrador.' 
+            });
+        }
 
-        const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY // Configure no Render
-        });
-
-        // Lógica de tradução baseada na dificuldade
+        console.log(`🔧 Traduzindo com dificuldade: ${difficulty}`);
+        
         const prompt = generatePrompt(text, difficulty);
-
+        
         const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
-                { role: "system", content: "You are a helpful translator." },
+                { 
+                    role: "system", 
+                    content: "Você é um tradutor especializado em livros e textos literários. Traduza mantendo o contexto e estilo." 
+                },
                 { role: "user", content: prompt }
             ],
-            max_tokens: 1000
+            max_tokens: 2000,
+            temperature: 0.7
         });
 
         const translatedText = completion.choices[0].message.content;
-
+        
+        console.log('✅ Tradução concluída com sucesso!');
         res.json({ translatedText });
+        
     } catch (error) {
-        console.error('Erro na tradução:', error);
-        res.status(500).json({ error: 'Erro interno no servidor' });
+        console.error('❌ Erro na tradução:', error);
+        
+        // Erros específicos da OpenAI
+        if (error.code === 'invalid_api_key') {
+            return res.status(500).json({ 
+                error: 'Chave da API inválida. Verifique a OPENAI_API_KEY.' 
+            });
+        }
+        
+        if (error.code === 'insufficient_quota') {
+            return res.status(500).json({ 
+                error: 'Cota da API excedida. Verifique seu plano OpenAI.' 
+            });
+        }
+        
+        res.status(500).json({ 
+            error: `Erro na tradução: ${error.message}` 
+        });
     }
 });
 
 function generatePrompt(text, difficulty) {
-    // Adapte conforme sua lógica de dificuldade
     const difficultyMap = {
-        easy: "Traduza para o português de forma simples e clara:",
-        medium: "Traduza para o português mantendo o estilo original:",
-        hard: "Traduza para o português de forma literária e elaborada:"
+        easy: "Traduza para o português brasileiro de forma SIMPLES e FÁCIL de entender, usando vocabulário básico:",
+        medium: "Traduza para o português brasileiro mantendo o estilo e vocabulário ORIGINAL do texto:",
+        hard: "Traduza para o português brasileiro de forma LITERÁRIA e SOFISTICADA, usando linguagem elaborada:"
     };
-    return `${difficultyMap[difficulty]} ${text}`;
+    
+    const instruction = difficultyMap[difficulty] || difficultyMap.medium;
+    return `${instruction}\n\nTexto para traduzir: "${text}"\n\nTradução:`;
 }
 
+// Rota de saúde para testar
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        openai_configured: !!process.env.OPENAI_API_KEY,
+        timestamp: new Date().toISOString()
+    });
+});
+
 app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`🔑 OpenAI Configurada: ${process.env.OPENAI_API_KEY ? 'SIM' : 'NÃO'}`);
 });
