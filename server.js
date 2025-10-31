@@ -1,7 +1,8 @@
 // server.js
 const express = require('express');
 const path = require('path');
-const OpenAI = require('openai');
+const { OpenAI } = require('openai');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -9,98 +10,82 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
-// Configuração OpenAI com verificação
-const getOpenAIClient = () => {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        console.error('❌ OPENAI_API_KEY não encontrada! Configure no Render.');
-        return null;
-    }
-    return new OpenAI({ apiKey });
+// Mapeamento de dificuldade para instruções de prompt
+const difficultyInstructions = {
+    'facil': 'Use uma linguagem muito simples, frases curtas e vocabulário básico. O objetivo é que uma criança ou um iniciante em português consiga entender.',
+    'medio': 'Use uma linguagem padrão, mantendo a riqueza do texto original, mas garantindo clareza. O vocabulário deve ser acessível, mas não simplificado demais.',
+    'dificil': 'Use uma linguagem formal, vocabulário avançado, e mantenha todas as nuances e complexidades gramaticais do texto original. O objetivo é uma tradução literária e sofisticada.'
 };
+
+// Inicializa o cliente OpenAI.
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 // Rota principal
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Rota de tradução com melhor tratamento de erro
+// Rota de tradução (baseada no seu código original)
 app.post('/api/translate', async (req, res) => {
-    console.log('📨 Recebendo requisição de tradução...');
-    
-    const { text, difficulty } = req.body;
-    
-    // Validações
-    if (!text) {
-        return res.status(400).json({ error: 'Texto é obrigatório' });
+    // Configurar CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
 
-    if (!difficulty) {
-        return res.status(400).json({ error: 'Dificuldade é obrigatória' });
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Método não permitido. Use POST.' });
     }
 
     try {
-        const openai = getOpenAIClient();
-        if (!openai) {
-            return res.status(500).json({ 
-                error: 'Serviço de tradução não configurado. Contate o administrador.' 
-            });
+        const { text, difficulty } = req.body;
+
+        if (!text || !difficulty) {
+            return res.status(400).json({ error: 'Parâmetros "text" e "difficulty" são obrigatórios.' });
         }
 
-        console.log(`🔧 Traduzindo com dificuldade: ${difficulty}`);
-        
-        const prompt = generatePrompt(text, difficulty);
-        
+        const instruction = difficultyInstructions[difficulty] || difficultyInstructions['medio'];
+
+        // 1. Criar o prompt completo para a IA
+        const systemPrompt = `Você é um tradutor literário profissional. Sua tarefa é traduzir o texto a seguir do Inglês para o Português. Mantenha o contexto e o tom da obra original. Além disso, você deve ajustar a complexidade da linguagem de acordo com a seguinte instrução: "${instruction}"`;
+
+        const userPrompt = `Traduza o seguinte texto: \n\n"""\n${text}\n"""`;
+
+        // 2. Chamar a API da OpenAI - CORRIGINDO O MODELO
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: "gpt-3.5-turbo", // Modelo correto (gpt-4.1-mini não existe)
             messages: [
-                { 
-                    role: "system", 
-                    content: "Você é um tradutor especializado em livros e textos literários. Traduza mantendo o contexto e estilo." 
-                },
-                { role: "user", content: prompt }
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
             ],
-            max_tokens: 2000,
-            temperature: 0.7
+            temperature: 0.2, // Baixa temperatura para traduções mais consistentes
         });
 
-        const translatedText = completion.choices[0].message.content;
-        
-        console.log('✅ Tradução concluída com sucesso!');
-        res.json({ translatedText });
-        
+        const translatedText = completion.choices[0].message.content.trim();
+
+        // 3. Retornar o resultado para o frontend
+        res.status(200).json({ translatedText });
+
     } catch (error) {
-        console.error('❌ Erro na tradução:', error);
+        console.error('Erro ao chamar a API da OpenAI:', error);
         
-        // Erros específicos da OpenAI
+        // Mensagens de erro mais específicas
         if (error.code === 'invalid_api_key') {
-            return res.status(500).json({ 
-                error: 'Chave da API inválida. Verifique a OPENAI_API_KEY.' 
-            });
+            return res.status(500).json({ error: 'Chave da API OpenAI inválida. Configure a OPENAI_API_KEY no Render.' });
         }
         
-        if (error.code === 'insufficient_quota') {
-            return res.status(500).json({ 
-                error: 'Cota da API excedida. Verifique seu plano OpenAI.' 
-            });
+        if (error.code === 'model_not_found') {
+            return res.status(500).json({ error: 'Modelo não encontrado. Verifique o nome do modelo.' });
         }
         
-        res.status(500).json({ 
-            error: `Erro na tradução: ${error.message}` 
-        });
+        res.status(500).json({ error: `Falha na tradução: ${error.message}` });
     }
 });
-
-function generatePrompt(text, difficulty) {
-    const difficultyMap = {
-        easy: "Traduza para o português brasileiro de forma SIMPLES e FÁCIL de entender, usando vocabulário básico:",
-        medium: "Traduza para o português brasileiro mantendo o estilo e vocabulário ORIGINAL do texto:",
-        hard: "Traduza para o português brasileiro de forma LITERÁRIA e SOFISTICADA, usando linguagem elaborada:"
-    };
-    
-    const instruction = difficultyMap[difficulty] || difficultyMap.medium;
-    return `${instruction}\n\nTexto para traduzir: "${text}"\n\nTradução:`;
-}
 
 // Rota de saúde para testar
 app.get('/health', (req, res) => {
