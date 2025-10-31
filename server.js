@@ -1,7 +1,7 @@
-// server.js
+// server.js - ATUALIZADO PARA GROQ
 const express = require('express');
 const path = require('path');
-const { OpenAI } = require('openai');
+const Groq = require('groq-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,9 +17,9 @@ const difficultyInstructions = {
     'dificil': 'Use uma linguagem formal, vocabulário avançado, e mantenha todas as nuances e complexidades gramaticais do texto original. O objetivo é uma tradução literária e sofisticada.'
 };
 
-// Inicializa o cliente OpenAI.
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+// Inicializa o cliente Groq
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY // MUDEI PARA GROQ_API_KEY
 });
 
 // Rota principal
@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Rota de tradução (baseada no seu código original)
+// Rota de tradução ATUALIZADA PARA GROQ
 app.post('/api/translate', async (req, res) => {
     // Configurar CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -51,52 +51,48 @@ app.post('/api/translate', async (req, res) => {
 
         const instruction = difficultyInstructions[difficulty] || difficultyInstructions['medio'];
 
-        // 1. Criar o prompt completo para a IA
+        // Prompt para a Groq
         const systemPrompt = `Você é um tradutor literário profissional. Sua tarefa é traduzir o texto a seguir do Inglês para o Português. Mantenha o contexto e o tom da obra original. Além disso, você deve ajustar a complexidade da linguagem de acordo com a seguinte instrução: "${instruction}"`;
 
         const userPrompt = `Traduza o seguinte texto: \n\n"""\n${text}\n"""`;
 
-        // 2. Chamar a API da OpenAI - CORRIGINDO O MODELO
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo", // Modelo correto (gpt-4.1-mini não existe)
+        // Chamar a API da Groq
+        const completion = await groq.chat.completions.create({
+            model: "llama-3.1-8b-instant", // Modelo rápido da Groq
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
             ],
-            temperature: 0.2, // Baixa temperatura para traduções mais consistentes
+            temperature: 0.2,
+            max_tokens: 2048
         });
 
         const translatedText = completion.choices[0].message.content.trim();
 
-        // 3. Retornar o resultado para o frontend
+        // Retornar o resultado
         res.status(200).json({ translatedText });
 
     } catch (error) {
-        console.error('Erro ao chamar a API da OpenAI:', error);
+        console.error('Erro ao chamar a API da Groq:', error);
         
-        // Mensagens de erro mais específicas
         if (error.code === 'invalid_api_key') {
-            return res.status(500).json({ error: 'Chave da API OpenAI inválida. Configure a OPENAI_API_KEY no Render.' });
-        }
-        
-        if (error.code === 'model_not_found') {
-            return res.status(500).json({ error: 'Modelo não encontrado. Verifique o nome do modelo.' });
+            return res.status(500).json({ error: 'Chave da API Groq inválida. Configure a GROQ_API_KEY no Render.' });
         }
         
         res.status(500).json({ error: `Falha na tradução: ${error.message}` });
     }
 });
 
-// Rota de saúde para testar
+// Rota de saúde atualizada
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        openai_configured: !!process.env.OPENAI_API_KEY,
+        groq_configured: !!process.env.GROQ_API_KEY, // MUDEI PARA GROQ
         timestamp: new Date().toISOString()
     });
 });
 
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`🔑 OpenAI Configurada: ${process.env.OPENAI_API_KEY ? 'SIM' : 'NÃO'}`);
+    console.log(`🔑 Groq Configurada: ${process.env.GROQ_API_KEY ? 'SIM' : 'NÃO'}`);
 });
