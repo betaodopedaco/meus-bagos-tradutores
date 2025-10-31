@@ -1,0 +1,12 @@
+{
+  "name": "tradutor-ia-livros",
+  "version": "1.0.0",
+  "description": "Tradutor de livros com ajuste de contexto e dificuldade usando OpenAI.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "openai": "^4.0.0"
+  }
+}

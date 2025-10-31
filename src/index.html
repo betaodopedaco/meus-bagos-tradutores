@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tradutor IA de Livros - Contexto e Dificuldade</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Tradutor IA de Livros</h1>
+        <p>Traduza seu livro do Inglês para o Português, mantendo o contexto e ajustando a dificuldade da linguagem.</p>
+
+        <section class="input-section">
+            <h2>Texto Original (Inglês)</h2>
+            <textarea id="inputText" placeholder="Cole o texto do livro aqui..."></textarea>
+        </section>
+
+        <section class="controls-section">
+            <label for="difficulty">Nível de Dificuldade:</label>
+            <select id="difficulty">
+                <option value="facil">Fácil (Linguagem simples e direta)</option>
+                <option value="medio" selected>Médio (Linguagem padrão, mantendo nuances)</option>
+                <option value="dificil">Difícil (Linguagem formal e vocabulário avançado)</option>
+            </select>
+            <button id="translateButton">Traduzir Livro</button>
+        </section>
+
+        <section class="output-section">
+            <h2>Texto Traduzido (Português)</h2>
+            <textarea id="outputText" readonly placeholder="A tradução aparecerá aqui..."></textarea>
+            <p id="statusMessage" class="hidden"></p>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
